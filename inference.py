@@ -158,22 +158,29 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print('Using {} for inference.'.format(device))
 
 def _load(checkpoint_path):
-	if device == 'cuda':
-		checkpoint = torch.load(checkpoint_path)
-	else:
-		checkpoint = torch.load(checkpoint_path,
-								map_location=lambda storage, loc: storage)
-	return checkpoint
-
+    import torch
+    if checkpoint_path.endswith('.pt'):
+        return torch.jit.load(checkpoint_path, map_location='cpu')
+    else:
+        return torch.load(checkpoint_path,
+                          map_location=lambda storage, loc: storage)
+	
 def load_model(path):
 	model = Wav2Lip()
 	print("Load checkpoint from: {}".format(path))
 	checkpoint = _load(path)
-	s = checkpoint["state_dict"]
-	new_s = {}
-	for k, v in s.items():
-		new_s[k.replace('module.', '')] = v
-	model.load_state_dict(new_s)
+
+	# Case 1: Normal .pth model (expected by repo)
+	if isinstance(checkpoint, dict):
+		s = checkpoint["state_dict"]
+		new_s = {}
+		for k, v in s.items():
+			new_s[k.replace('module.', '')] = v
+		model.load_state_dict(new_s)
+
+	# Case 2: TorchScript .pt model (your SD model)
+	else:
+		model = checkpoint
 
 	model = model.to(device)
 	return model.eval()
